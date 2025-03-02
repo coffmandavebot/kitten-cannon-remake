@@ -246,4 +246,22 @@ export default class Cannon {
             this.powerVelocity = this.powerVelocityScale;
         }
     }
+
+    aimAt(directionVector) {
+        // Get the barrel position as the reference point
+        const barrelPos = this.getBarrelStart();
+        
+        // Calculate correct angle for this game's coordinate system
+        // In most 2D games, 0 is right, PI/2 is down
+        let angle = Math.atan2(directionVector.y, directionVector.x);
+        
+        // Set the barrel angle directly - no loops which can cause issues
+        // Use your cannon's actual min/max values from the class
+        this.barrel_angle = Math.max(this.barrel_angleMin, 
+                                   Math.min(this.barrel_angleMax, angle));
+        
+        console.log("Aiming with angle:", this.barrel_angle, 
+                   "min:", this.barrel_angleMin, 
+                   "max:", this.barrel_angleMax);
+    }
 }

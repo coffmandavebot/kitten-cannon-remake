@@ -21,6 +21,8 @@ import Renderer from "./Lib/Renderer/Renderer.js";
 import Camera2D from "./Lib/Camera2D/Camera2D.js";
 //-[/Imports]------------------------------------------
 
+window.userId = userId || null; // userId comes from PHP
+window.distance_travelled_px = 0;
 
 async function main() {
     setup();
@@ -57,6 +59,7 @@ let distance_travelled_px = 0;
 let should_reset = false;
 let max_skip_frames = 0;
 let skip_frames = 0;
+let globalHighScore = "0"; // Default global high score until fetched from server
 
 let preload_message = "";
 let preload_percentage = 0;
@@ -96,6 +99,16 @@ let up_button;
 let down_button;
 let height_display;
 
+let highScoreFetched = false; // Add this flag at the top with other global variables
+
+// Keep track of ongoing requests and last fetch time
+let fetchingHighScore = false;
+let lastFetchTime = 0;
+const MIN_FETCH_INTERVAL = 2000; // minimum 2 seconds between fetches
+
+// Add this variable to preserve the personal high score
+let personalBestDisplay = "0";
+
 //-[/Global Variables]------------------------------------------ 
 
 
@@ -109,7 +122,6 @@ function setup() {
 
 
 async function preload() {
-
     sound_manager = new SoundManager();
     let proms = [];
     proms.push(new Promise(async (resolve, reject) => {
@@ -123,8 +135,15 @@ async function preload() {
     }));
 
     await Promise.all(proms);
-
+    
+    // Create scoreboard FIRST
     score_board = new ScoreBoard(ctx);
+    
+    // Load both global high score and personal best in parallel
+    await Promise.all([
+        fetchGlobalHighScore(),
+        fetchPersonalHighScore()
+    ]);
 
     menu_screen = new MenuScreen(ctx, screens_sprite, "Nicotine");
     how_to_play_screen = new HowToPlayScreen(ctx, screens_sprite, "Nicotine");
@@ -150,9 +169,6 @@ function reset_game() {
     cannon = new Cannon(renderer, game_sprite, sound_manager);
     kitty = new Kitten(renderer, game_sprite, sound_manager);
     objectGenerator = new ObjectGenerator(renderer, game_sprite, kitty, OBJECT_GAP, sound_manager);
-    up_button = new RoundButton(ctx, "👆", new Vector2D(canvas.width - 110, canvas.height - 250), 50, "white", "black", "Nicotine");
-    fire_button = new RoundButton(ctx, "🔥", new Vector2D(canvas.width - 230, canvas.height - 180), 50, "white", "black", "Nicotine");
-    down_button = new RoundButton(ctx, "👇", new Vector2D(canvas.width - 110, canvas.height - 110), 50, "white", "black", "Nicotine");
     height_display = new HeightDisplay(renderer, pixel_per_feet, "Nicotine");
 
     camera.follow(new Vector2D(canvas.width / 2, canvas.height / 2), 1);
@@ -161,20 +177,25 @@ function reset_game() {
     distance_travelled_px = 0;
     add_button_events();
     timer.getTickS();
+    
+    // Fetch updated high scores at the start of each game
+    fetchGlobalHighScore(0);
+    
+    highScoreFetched = false; // Reset the flag when starting a new game
 }
 
 
 function add_button_events() {
 
-    fire_button.onClick = (function () {
-        throw_kitty();
-    });
-    up_button.onClick = (function () {
-        cannon.barrelUp();
-    });
-    down_button.onClick = (function () {
-        cannon.barrelDown();
-    });
+    // fire_button.onClick = (function () {
+    //     throw_kitty();
+    // });
+    // up_button.onClick = (function () {
+    //     cannon.barrelUp();
+    // });
+    // down_button.onClick = (function () {
+    //     cannon.barrelDown();
+    // });
 
 
 
@@ -285,7 +306,7 @@ function gameLoop() {
             preload_screen();
             break;
         case GAME_SCREENS_E.Splash:
-            splash_screen();
+            //splash_screen();
             break;
         case GAME_SCREENS_E.Menu:
             render_screen(menu_screen);
@@ -380,19 +401,11 @@ function preload_screen() {
         ctx.restore();
 
 
-        if (TouchController.TOUCH_EVENT_TYPES.click == TouchController.TOUCH_INFORMATION.eventType) {
-            let touch_pos = TouchController.map_coord_to_canvas(TouchController.TOUCH_INFORMATION.position.copy(), canvas);
 
-            if (touch_pos.subtract(arc_pos).magSq() <= arc_r * arc_r) {
-                setTimeout(() => {
-                    CURRENT_GAME_SCREEN = GAME_SCREENS_E.Splash;
-                    sound_manager.play("after_load").onended = () => {
-                        CURRENT_GAME_SCREEN = GAME_SCREENS_E.Menu;
-                        cannon.resetBarrel();
-                    }
-                }, 400);
-            }
-        }
+		CURRENT_GAME_SCREEN = GAME_SCREENS_E.Menu;
+		cannon.resetBarrel();
+
+
 
     } else {
 
@@ -431,10 +444,15 @@ function render_screen(screen_class) {
     if (TouchController.TOUCH_INFORMATION.eventType == TouchController.TOUCH_EVENT_TYPES.down) {
         let correct_pos = TouchController.map_coord_to_canvas(TouchController.TOUCH_INFORMATION.position, canvas);
         screen_class.updateClickInput(correct_pos);
+        // Immediately reset the event type after processing
+        TouchController.TOUCH_INFORMATION.eventType = TouchController.TOUCH_EVENT_TYPES.none;
     }
 }
 
 function render_game_screen() {
+    // Add debug info here
+
+               
     let dt = timer.getTickS();
     let fps = (1 / dt);
     ctx.font = "50px Nicotine";
@@ -455,10 +473,45 @@ function render_game_screen() {
     let correct_pos = TouchController.map_coord_to_canvas(TouchController.TOUCH_INFORMATION.position, canvas);
 
     if (TouchController.TOUCH_INFORMATION.eventType == TouchController.TOUCH_EVENT_TYPES.down) {
-        score_board.updateClickInput(correct_pos);
-        fire_button.updateClickInput(correct_pos);
-        up_button.updateClickInput(correct_pos);
-        down_button.updateClickInput(correct_pos);
+        // Check if tap is on buttons first
+        let buttonHit = false;
+        try {
+            console.log("Processing touch event");
+            // First check if the tap hits any UI button
+            // For score board, we need to check if it's visible AND if the tap hit it
+            // When it's visible, we ONLY want to process score board interaction
+            if (score_board.visible) {
+                score_board.updateClickInput(correct_pos);
+                // If score board is visible, don't process any other taps/clicks
+                buttonHit = true; 
+            } else {
+                // Only check other buttons if score board isn't visible
+                // if (fire_button.visible) {
+                //     fire_button.updateClickInput(correct_pos);
+                //     buttonHit = buttonHit || fire_button.isPointInside(correct_pos);
+                // }
+                
+                // if (up_button.visible) {
+                //     up_button.updateClickInput(correct_pos);
+                //     buttonHit = buttonHit || up_button.isPointInside(correct_pos);
+                // }
+                
+                // if (down_button.visible) {
+                //     down_button.updateClickInput(correct_pos);
+                //     buttonHit = buttonHit || down_button.isPointInside(correct_pos);
+                // }
+                
+                // If no button was hit, handle as a firing tap
+                if (!buttonHit && !kitty.visible && !kitty.isDead) {
+                    aimAndFireAtPosition(correct_pos);
+                }
+            }
+        } catch (e) {
+            console.error("Error in touch handling:", e);
+        } finally {
+            // Immediately reset the event type after processing to prevent multiple processing
+            TouchController.TOUCH_INFORMATION.eventType = TouchController.TOUCH_EVENT_TYPES.none;
+        }
     }
 
     objectGenerator.update(dt);
@@ -474,21 +527,49 @@ function render_game_screen() {
 
     if (kitty.isDead) {
         handle_highScore();
+        
+        // Only fetch high score once when the kitten dies
+        if (!highScoreFetched) {
+            highScoreFetched = true;
+            const finalScore = Math.floor(distance_travelled_px / pixel_per_feet);
+            fetchGlobalHighScore(finalScore);
+        }
+        
         score_board.visible = true;
     }
 
     { // SCORE BOARD
         let distance_travelled = (distance_travelled_px / pixel_per_feet).toFixed(0);
-        let highest_distance_travelled = (highest_distance_travelled_px / pixel_per_feet).toFixed(0);
+        
+        // Only update distance_travelled_px if kitty is alive and visible
         if (!(kitty.isDead) && kitty.visible) {
             distance_travelled_px += kitty.velocity.x * dt;
         }
-
-
-        score_board.score = distance_travelled;
-        score_board.highScore = highest_distance_travelled;
+        
+        // If distance_travelled_px increased beyond highest_distance_travelled_px,
+        // update highest_distance_travelled_px and personalBestDisplay
+        if (distance_travelled_px > highest_distance_travelled_px) {
+            highest_distance_travelled_px = distance_travelled_px;
+            personalBestDisplay = (highest_distance_travelled_px / pixel_per_feet).toFixed(0);
+        }
+        
+        // Make all score variables available globally
+        window.distance_travelled_px = distance_travelled_px;
+        window.distance_travelled = distance_travelled;
+        window.gameScore = distance_travelled;
+        
+        // Update scores on scoreboard
+        score_board.score = distance_travelled; 
+        score_board.highScore = personalBestDisplay; // Use our persistent display value
+        score_board.globalHighScore = globalHighScore;
+        
+        // Only use mock percentile if we don't have a server-provided one already
+        if (score_board.percentile === 0 || score_board.percentile === undefined) {
+            let mockPercentile = Math.min(99, Math.floor((distance_travelled / 2000) * 100));
+            score_board.percentile = mockPercentile;
+        }
+        
         score_board.draw();
-
     }
 
     grass.draw();
@@ -497,10 +578,10 @@ function render_game_screen() {
     height_display.draw();
 
 
-    fire_button.draw();
-    up_button.draw();
+    //fire_button.draw();
+    //up_button.draw();
     height_display.draw();
-    down_button.draw();
+    //down_button.draw();
 
     objectGenerator.drawAll();
 
@@ -514,9 +595,9 @@ function render_game_screen() {
 //-[Helpers]-------------------------------------------------
 
 function hide_buttons() {
-    fire_button.visible = false;
-    up_button.visible = false;
-    down_button.visible = false;
+    // fire_button.visible = false;
+    // up_button.visible = false;
+    // down_button.visible = false;
 }
 
 
@@ -524,12 +605,44 @@ function hide_buttons() {
 function handle_highScore() {
     if (distance_travelled_px > highest_distance_travelled_px) {
         highest_distance_travelled_px = distance_travelled_px;
+        personalBestDisplay = (highest_distance_travelled_px / pixel_per_feet).toFixed(0);
+        
+        // If this is a new personal best and the user is logged in,
+        // you might want to submit it to the server and refresh the global high score
+        if (window.userId) {
+            submitScore(distance_travelled_px / pixel_per_feet);
+            fetchGlobalHighScore(); // Refresh the global high score
+        }
     }
 }
 
+// Optional: Add a function to submit scores
+async function submitScore(score) {
+    try {
+        const data = new FormData();
+        data.append('score', score);
+        data.append('userId', window.userId);
+        
+        const response = await fetch('save_score.php', {
+            method: 'POST',
+            body: data
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // You could handle the response if needed
+    } catch (e) {
+        console.error('Error submitting score:', e);
+    }
+}
 
 function throw_kitty() {
     if (!kitty.visible && !kitty.isDead) {
+        // Don't hide UI elements when firing
+        // Remove any hide_buttons() calls here
+        
         cannon.barrelShoot();
         let barrelDir = cannon.getBarrelDirectionVector();
         kitty.visible = true;
@@ -542,11 +655,109 @@ function throw_kitty() {
             sound_manager.play("cat" + randomInt(1, 6))
         }
         sound_manager.play("baloon_blast");
-
+        
+        // Debug message
+        console.log("Kitten fired at angle:", cannon.barrel_angle, 
+                   "power:", cannon.powerPercent);
     }
-    hide_buttons();
 }
 
+function aimAndFireAtPosition(position) {
+    // Get cannon barrel start position - this is more accurate
+    const cannonPos = cannon.getBarrelStart();
+    
+    // Calculate direction vector from cannon to tap position
+    const aimDirection = position.copy().subtract(cannonPos);
+    
+    console.log("Tap position:", position.x, position.y);
+    console.log("Cannon position:", cannonPos.x, cannonPos.y);
+    console.log("Aim direction:", aimDirection.x, aimDirection.y);
+    
+    // Set cannon angle based on the direction vector
+    cannon.aimAt(aimDirection);
+    
+    // Now fire the kitty
+    throw_kitty();
+}
+
+async function fetchGlobalHighScore(optionalScore = null) {
+    // Don't fetch if we're already fetching or if it's been less than MIN_FETCH_INTERVAL since last fetch
+    if (fetchingHighScore || (Date.now() - lastFetchTime < MIN_FETCH_INTERVAL)) {
+        console.log("High score fetch skipped - too frequent or already in progress");
+        return;
+    }
+    
+    try {
+        fetchingHighScore = true;
+        lastFetchTime = Date.now();
+        
+        // Rest of your existing code...
+        const currentScore = optionalScore !== null ? 
+            optionalScore : 
+            Math.floor(distance_travelled_px / pixel_per_feet);
+        
+        console.log("Fetching high score for score:", currentScore);
+        
+        const response = await fetch(`get_high_score.php?score=${currentScore}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Update the global high score
+        if (data && data.highScore) {
+            globalHighScore = data.highScore;
+            
+            if (data.percentile !== undefined && score_board) {
+                score_board.percentile = data.percentile;
+            }
+        }
+    } catch (e) {
+        console.error('Error fetching global high score:', e);
+    } finally {
+        // Always reset the fetching flag when done
+        fetchingHighScore = false;
+    }
+}
+
+// Modify fetchPersonalHighScore to save the display value
+async function fetchPersonalHighScore() {
+    if (!window.userId) {
+        console.log("No user ID, skipping personal high score fetch");
+        return;
+    }
+    
+    try {
+        console.error("Fetching personal best for user:", window.userId);
+        const response = await fetch(`get_personal_high_score.php?userId=${window.userId}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.personalHighScore) {
+            console.error("Personal best retrieved:", data.personalHighScore);
+            
+            // Store the display value
+            personalBestDisplay = data.personalHighScore;
+            
+            // Convert feet (from DB) to pixels (game uses pixels internally)
+            const highScoreInPixels = parseInt(data.personalHighScore) * pixel_per_feet;
+            
+            // Update the game's high score variable
+            highest_distance_travelled_px = Math.max(highest_distance_travelled_px, highScoreInPixels);
+        }
+        else {
+            console.error("Could not retrieve personal best.");
+        }
+    } catch (e) {
+        console.error('Error fetching personal high score:', e);
+    }
+}
 
 addEventListener("click", goFullScreen);
 

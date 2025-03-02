@@ -6,11 +6,14 @@ export default class ScoreBoard {
         this.__ctx = canvas2D_context;
         this.score = "";
         this.highScore = "";
+        this.globalHighScore = ""; // Add global high score property
+        this.percentile = 0; // Add percentile property
         this.visible = false;
         this.buttons = {};
         this.onContinue = () => { }
         this.onMenu = () => { }
         this.__create_buttons();
+        this.isNewRecord = false; // Add property to track if user set a new record
     }
 
     __create_buttons() {
@@ -21,7 +24,7 @@ export default class ScoreBoard {
         { // Continue button
             let text = "Continue";
             let font_width = this.__ctx.measureText(text).width;
-            let position = new Vector2D(canvas_w_half - font_width * 3 / 2, canvas_h_half - 10);
+            let position = new Vector2D(canvas_w_half - font_width * 3 / 2, canvas_h_half + 30);
             this.buttons["continue"] = new Button(this.__ctx, text, position, 44, "#ff680b", "Nicotine");
             this.buttons["continue"].onClick = () => {
                 this.onContinue();
@@ -31,7 +34,7 @@ export default class ScoreBoard {
         { // Exit to menu button
             let text = "Exit to menu";
             let font_width = this.__ctx.measureText(text).width;
-            let position = new Vector2D(canvas_w_half - font_width * 3 / 2, canvas_h_half + 38);
+            let position = new Vector2D(canvas_w_half - font_width * 3 / 2, canvas_h_half + 60);
             this.buttons["exit_to_continue"] = new Button(this.__ctx, text, position, 44, "#666", "Nicotine");
             this.buttons["exit_to_continue"].onClick = () => {
                 this.onMenu();
@@ -47,7 +50,7 @@ export default class ScoreBoard {
         { // Board  && Legs
 
             let boardW = 512;
-            let boardH = 300;
+            let boardH = 400; // Increased height to fit more text
             this.__ctx.lineWidth = 5;
 
             // Board
@@ -80,8 +83,8 @@ export default class ScoreBoard {
         }
 
         this.__ctx.textBaseline = "top";
-        { // Score
-            this.__ctx.font = "130px Nicotine";
+        { // Current Score - Big display
+            this.__ctx.font = "100px Nicotine";
 
             if (this.score >= 1000) this.__ctx.fillStyle = "#600";
             else this.__ctx.fillStyle = "#060";
@@ -89,20 +92,61 @@ export default class ScoreBoard {
 
             let txt = this.score + " ft";
             let font_width = this.__ctx.measureText(txt).width;
-            this.__ctx.fillText(txt, canvas_w_half - font_width / 2, canvas_h_half - 198);
+            this.__ctx.fillText(txt, canvas_w_half - font_width / 2, canvas_h_half - 230);
         }
-        { // High Score
-            let txt = "Your High Score: " + this.highScore + " ft";
+        
+        // New Record message - display only if player set a new record
+        if (parseInt(this.score) > parseInt(this.globalHighScore)) {
+            this.__ctx.font = "52px Nicotine";
+            this.__ctx.fillStyle = "#FF4500"; // Bright orange-red color
+            
+            let txt = "Congratulations! New PAX Record!";
+            let font_width = this.__ctx.measureText(txt).width;
+            this.__ctx.fillText(txt, canvas_w_half - font_width / 2, canvas_h_half - 130);
+            
+            // Add subtle animation - pulsing effect
+            const pulseAmount = Math.sin(Date.now() / 200) * 0.1 + 0.9;
+            this.__ctx.globalAlpha = pulseAmount;
+            this.__ctx.fillText(txt, canvas_w_half - font_width / 2, canvas_h_half - 130);
+            this.__ctx.globalAlpha = 1.0;
+        } else {
+            // Only show percentile if NOT a new record
+            { // Percentile
+                this.__ctx.font = "44px Nicotine";
+                this.__ctx.fillStyle = "#0066cc";
+                
+                let txt = "Better than " + this.percentile + "% of players!";
+                let font_width = this.__ctx.measureText(txt).width;
+                this.__ctx.fillText(txt, canvas_w_half - font_width / 2, canvas_h_half - 130);
+            }
+        }
+
+        { // Personal High Score
+            let txt = "Your Best: " + this.highScore + " ft";
             this.__ctx.font = "44px Nicotine";
             if (this.highScore >= 1000) {
-
                 this.__ctx.fillStyle = "#600";
             } else {
                 this.__ctx.fillStyle = "#060";
             }
             let font_width = this.__ctx.measureText(txt).width;
-            this.__ctx.fillText(txt, canvas_w_half - font_width / 2 + 6, canvas_h_half - 68);
+            this.__ctx.fillText(txt, canvas_w_half - font_width / 2, canvas_h_half - 80);
         }
+        
+        { // Global High Score
+            let txt;
+            if (parseInt(this.score) > parseInt(this.globalHighScore)) {
+                txt = "Old World Record: " + this.globalHighScore + " ft";
+            } else {
+                txt = "World Record: " + this.globalHighScore + " ft";
+            }           
+            this.__ctx.font = "44px Nicotine";
+            this.__ctx.fillStyle = "#cc6600";
+            
+            let font_width = this.__ctx.measureText(txt).width;
+            this.__ctx.fillText(txt, canvas_w_half - font_width / 2, canvas_h_half - 30);
+        }
+        
         for (let key in this.buttons) {
             this.buttons[key].draw();
         }

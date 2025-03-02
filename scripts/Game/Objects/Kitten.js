@@ -38,6 +38,7 @@ export default class Kitten {
         this.omega = 0.05;
         this.virtualPosXMax = this.__renderer.canvas.width - 300;
         this.bloodParticles = [];
+        this.scoreSaved = false;
     }
 
     throw(velocity) {
@@ -52,6 +53,45 @@ export default class Kitten {
         if (this.isDead) {
             this.position.y = this.groundLevel - this.height;
             this.velocity = new Vector2D(0, 0);
+            
+            // Ensure this code runs only once when kitten dies
+            if (!this.scoreSaved) {
+                this.scoreSaved = true; // Mark as saved first to prevent multiple attempts
+                
+                // Use setTimeout to delay the alert and score saving
+                setTimeout(() => {
+                    // Fix: Get the score from the correct global variable
+                    const score = Math.round(window.distance_travelled_px / 100) || 0;
+                    
+                    if (window.userId) {
+                        try {
+                            this.saveScore(score);
+                            // Use a direct DOM approach instead of alert which might be blocked
+                            document.body.insertAdjacentHTML('beforeend', 
+                                `<div id="score-saved" style="position:absolute;top:10px;left:10px;background:white;padding:5px;z-index:1000">
+                                    Score ${score} saved for user ${window.userId}
+                                </div>`
+                            );
+                            // Remove the notification after 3 seconds
+                            setTimeout(() => {
+                                const element = document.getElementById('score-saved');
+                                if (element) element.remove();
+                            }, 3000);
+                        } catch (e) {
+                            // If there's an error, try to show it
+                            document.body.insertAdjacentHTML('beforeend', 
+                                `<div id="score-error" style="position:absolute;top:10px;left:10px;background:red;color:white;padding:5px;z-index:1000">
+                                    Error saving score: ${e.message}
+                                </div>`
+                            );
+                            setTimeout(() => {
+                                const element = document.getElementById('score-error');
+                                if (element) element.remove();
+                            }, 3000);
+                        }
+                    }
+                }, 100); // Small delay to ensure game state is properly updated
+            }
             return;
         }
         this.position.add(this.velocity.copy().scale(dt));
@@ -79,6 +119,49 @@ export default class Kitten {
             this.omega = this.velocity.x / 120;
         }
         this.rotation += this.omega * dt;
+    }
+
+    saveScore(score) {
+        // Make sure we have the userid and score
+        if (!window.userId || score === undefined) {
+            throw new Error("Missing userId or score");
+        }
+        
+        // Debug log to see actual values being sent
+        console.warn("Saving score:", score, "for user:", window.userId);
+        
+        // Add a timestamp to prevent caching issues
+        const timestamp = new Date().getTime();
+        return fetch('save_score.php?t=' + timestamp, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `userid=${encodeURIComponent(window.userId)}&score=${encodeURIComponent(score)}`
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}`);
+            }
+            return response.text();
+        })
+        .then(text => {
+            // For debugging purposes
+            console.warn("Score save response:", text);
+            
+            try {
+                // Store raw response text in case JSON parsing fails
+                window.lastScoreResponseText = text;
+                
+                // Try to parse as JSON
+                const data = JSON.parse(text);
+                window.lastScoreResponse = data;
+                return data;
+            } catch (e) {
+                window.lastScoreError = "JSON parse error: " + e.message;
+                throw new Error("Invalid JSON response: " + text);
+            }
+        });
     }
 
     spawnBlood() {

@@ -10,8 +10,21 @@ export default class Creditscreen {
         this.onBackClick = () => { };
         this.buttons = {};
         this.visible = true;
+        
+        // Add credits text content
+        this.creditsText = [
+            "This is very clearly based on the very rad",
+            "Kitten Cannon flash game by Dan Fleming. That",
+            "died with flash, but if this poor imitation",
+			"doesn't satiate you, you can find a better",
+            "version on addictinggames.com. Credit also",
+            "to Prashanth Kumar for porting it to",
+            "javascript and posting source to github."
+        ];
+        
         this.__create_buttons();
     }
+    
     __create_buttons() {
         let canvas_w_half = this.__ctx.canvas.width / 2;
         let canvas_h = this.__ctx.canvas.height;
@@ -29,6 +42,7 @@ export default class Creditscreen {
             }
         }
     }
+    
     updateClickInput(cursor_position_vec) {
         if (!this.visible) return;
         if (!(cursor_position_vec instanceof Vector2D)) throw Error(" Cursor position should be a vector2D .");
@@ -36,15 +50,43 @@ export default class Creditscreen {
             this.buttons[button_key].updateClickInput(cursor_position_vec);
         }
     }
+    
     draw() {
-
         if (!this.visible) return;
 
         this.__frame.draw(this.__ctx, 0, 0, this.__ctx.canvas.width, this.__ctx.canvas.height);
+        
+        // Draw the credits text
+        this.__drawCreditsText();
 
         for (let key in this.buttons) {
             this.buttons[key].draw();
         }
-
+    }
+    
+    __drawCreditsText() {
+        const ctx = this.__ctx;
+        const canvasWidth = ctx.canvas.width;
+        const canvasHeight = ctx.canvas.height;
+        
+        // Set text properties
+        ctx.font = "24px " + this.__button_font_family;
+        ctx.fillStyle = "#000";
+        ctx.textAlign = "center";
+        
+        // Calculate starting Y position to center the text block
+        const lineHeight = 36;
+        const totalTextHeight = this.creditsText.length * lineHeight;
+        const verticalOffset = 100;
+        let yPos = (canvasHeight - totalTextHeight) / 2 + verticalOffset;
+		
+        // Draw each line
+        this.creditsText.forEach(line => {
+            ctx.fillText(line, canvasWidth / 2, yPos);
+            yPos += lineHeight;
+        });
+        
+        // Reset text alignment to default
+        ctx.textAlign = "start";
     }
 }

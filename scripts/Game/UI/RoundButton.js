@@ -52,4 +52,20 @@ export default class RoundButton {
             this.onClick();
         }
     }
+
+    /**
+     * Check if a point is inside this button
+     * @param {Vector2D} point - The point to check
+     * @returns {boolean} - True if the point is inside the button
+     */
+    isPointInside(point) {
+        if (!this.visible) return false;
+        
+        // Calculate distance between point and button center
+        const dx = point.x - this.position.x;
+        const dy = point.y - this.position.y;
+        
+        // Check if distance is less than the radius
+        return (dx * dx + dy * dy) <= (this.radius * this.radius);
+    }
 }
