@@ -19,6 +19,7 @@ import Timer from "./Game/Timer.js";
 import SoundManager from "./Game/SoundManager.js";
 import Renderer from "./Lib/Renderer/Renderer.js";
 import Camera2D from "./Lib/Camera2D/Camera2D.js";
+import DistanceDisplay from "./Game/Objects/DistanceDisplay.js";
 //-[/Imports]------------------------------------------
 
 window.userId = userId || null; // userId comes from PHP
@@ -98,6 +99,7 @@ let fire_button;
 let up_button;
 let down_button;
 let height_display;
+let distance_display;
 
 let highScoreFetched = false; // Add this flag at the top with other global variables
 
@@ -170,6 +172,7 @@ function reset_game() {
     kitty = new Kitten(renderer, game_sprite, sound_manager);
     objectGenerator = new ObjectGenerator(renderer, game_sprite, kitty, OBJECT_GAP, sound_manager);
     height_display = new HeightDisplay(renderer, pixel_per_feet, "Nicotine");
+    distance_display = new DistanceDisplay(renderer, pixel_per_feet, "Nicotine"); // Initialize the distance display
 
     camera.follow(new Vector2D(canvas.width / 2, canvas.height / 2), 1);
 
@@ -470,6 +473,15 @@ function render_game_screen() {
     kitty.update(dt);
     height_display.updateWithKittenPosition(kitty.position);
 
+    // Only update distance_travelled_px if kitty is alive and visible
+    if (!(kitty.isDead) && kitty.visible) {
+        distance_travelled_px += kitty.velocity.x * dt;
+        distance_display.update(distance_travelled_px);
+    }
+    
+    // Update the distance display with current distance - add this line
+
+
     let correct_pos = TouchController.map_coord_to_canvas(TouchController.TOUCH_INFORMATION.position, canvas);
 
     if (TouchController.TOUCH_INFORMATION.eventType == TouchController.TOUCH_EVENT_TYPES.down) {
@@ -576,11 +588,11 @@ function render_game_screen() {
     cannon.draw();
     kitty.draw();
     height_display.draw();
-
+    distance_display.draw(); // Draw the distance display
 
     //fire_button.draw();
     //up_button.draw();
-    height_display.draw();
+    //height_display.draw();
     //down_button.draw();
 
     objectGenerator.drawAll();

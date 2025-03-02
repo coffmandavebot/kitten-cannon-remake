@@ -17,6 +17,7 @@ export default class HeightDisplay {
     }
     draw() {
         if (this.kittenPosition.y < 0) {
+            this.visible = true;
             let text = ((Math.abs(this.kittenPosition.y) + this.__renderer.camera.getHeight()) / this.__pixel_per_feet).toFixed(0);
             this.__renderer.lineThickness = 2;
             let pos = new Vector2D(this.kittenPosition.x + this.width / 2, 22);
@@ -35,6 +36,9 @@ export default class HeightDisplay {
                 this.font_family,
                 "middle"
             );
+        }
+        else {
+            this.visible = false;
         }
     }
 }
