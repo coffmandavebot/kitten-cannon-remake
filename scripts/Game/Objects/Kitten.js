@@ -67,16 +67,6 @@ export default class Kitten {
                         try {
                             this.saveScore(score);
                             // Use a direct DOM approach instead of alert which might be blocked
-                            document.body.insertAdjacentHTML('beforeend', 
-                                `<div id="score-saved" style="position:absolute;top:10px;left:10px;background:white;padding:5px;z-index:1000">
-                                    Score ${score} saved for user ${window.userId}
-                                </div>`
-                            );
-                            // Remove the notification after 3 seconds
-                            setTimeout(() => {
-                                const element = document.getElementById('score-saved');
-                                if (element) element.remove();
-                            }, 3000);
                         } catch (e) {
                             // If there's an error, try to show it
                             document.body.insertAdjacentHTML('beforeend', 
@@ -87,7 +77,7 @@ export default class Kitten {
                             setTimeout(() => {
                                 const element = document.getElementById('score-error');
                                 if (element) element.remove();
-                            }, 3000);
+                            }, 1000);
                         }
                     }
                 }, 100); // Small delay to ensure game state is properly updated
